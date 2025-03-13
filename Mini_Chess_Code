@@ -9,7 +9,7 @@ class MiniChess:
         self.current_game_state = self.init_board()
         self.trace_file = "game_trace.txt"
         self.turn_count = 1
-        self.last_capture_turn = 1
+        self.last_capture_turn = 0
         self.log_initial_board()
 
     def init_board(self):
@@ -47,6 +47,21 @@ class MiniChess:
             return ((start_row, start_col), (end_row, end_col))
         except Exception:
             return None
+        
+    def is_path_clear(self, game_state, start, end):
+        row_diff = end[0] - start[0]
+        col_diff = end[1] - start[1]
+        step_r = 0 if row_diff == 0 else (1 if row_diff > 0 else -1)
+        step_c = 0 if col_diff == 0 else (1 if col_diff > 0 else -1)
+        
+        r, c = start[0] + step_r, start[1] + step_c
+        while (r, c) != (end[0], end[1]):
+            if game_state["board"][r][c] != '.':
+                return False
+            r += step_r
+            c += step_c
+        return True
+    
 
     def is_valid_move(self, game_state, move):
         start, end = move
@@ -75,18 +90,23 @@ class MiniChess:
 
         if piece_type == 'K':  
             return max(abs(row_diff), abs(col_diff)) == 1
+        
+        if piece_type == 'Q' or piece_type == 'B':  
+            if abs(row_diff) == abs(col_diff):  # Diagonal movement
+                return self.is_path_clear(game_state, start, end)
 
         if piece_type == 'Q':  
-            return row_diff == 0 or col_diff == 0 or abs(row_diff) == abs(col_diff)
+            if row_diff == 0 or col_diff == 0:  # Straight-line movement
+                 return self.is_path_clear(game_state, start, end)
 
-        if piece_type == 'B':  
-            return abs(row_diff) == abs(col_diff)
 
         if piece_type == 'N': 
             return (abs(row_diff), abs(col_diff)) in  [(2, 1), (2, -1), (-2, 1), (-2, -1),
                                      (1, 2), (1, -2), (-1, 2), (-1, -2)]
 
         return False
+    
+    
 
     def valid_moves(self, game_state):
         moves = []
@@ -146,15 +166,15 @@ class MiniChess:
         with open(self.trace_file, "a") as file:
             file.write(f"Game Over: {winner} won in {self.turn_count} turns\n")
             file.write("========== GAME TRACE END ==========" + "\n\n")
-        print(f"{winner} wins in {self.turn_count} turns!")
+        print(f"{winner} {self.turn_count} turns!")
 
 
     def check_end_conditions(self):
         if not any('bK' in row for row in self.current_game_state["board"]):
-            self.announce_winner("White")
+            self.announce_winner("White wins in")
             return True
         if not any('wK' in row for row in self.current_game_state["board"]):
-            self.announce_winner("Black")
+            self.announce_winner("Black wins in")
             return True
         if self.turn_count - self.last_capture_turn >= 10:
             self.announce_winner("Draw")
