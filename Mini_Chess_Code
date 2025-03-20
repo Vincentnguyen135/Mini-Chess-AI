@@ -139,46 +139,41 @@ class MiniChess:
         game_state["board"][start[0]][start[1]] = '.'
         game_state["board"][end[0]][end[1]] = piece
 
+        # Pawn Promotion
         if piece[1] == 'p' and ((piece[0] == 'w' and end[0] == 0) or (piece[0] == 'b' and end[0] == 4)):
             game_state["board"][end[0]][end[1]] = piece[0] + 'Q'
 
+        # Log the move
         player = "White" if game_state["turn"] == 'white' else "Black"
         self.log_move(player, move)
 
+        # Switch turns
         game_state["turn"] = 'black' if game_state["turn"] == 'white' else 'white'
-        self.turn_count += 1
+
+        # ✅ Only increment turn count when Black finishes moving (ensures a full turn is counted)
+        if game_state["turn"] == "white":
+            self.turn_count += 1  # This happens AFTER AI's move (or Black's move in human vs human)
 
         return target_piece  # Return captured piece for undoing move
 
 
-    def undo_move(self, game_state, move, target_piece):
-        start, end = move
-        moved_piece = game_state["board"][end[0]][end[1]]
-        game_state["board"][start[0]][start[1]] = moved_piece
-        game_state["board"][end[0]][end[1]] = target_piece
-
-        game_state["turn"] = 'black' if game_state["turn"] == 'white' else 'white'
-        self.turn_count -= 1
-
-    def minimax(self, game_state, depth, maximizing_player=True):
+    def minimax(self, game_state, depth, alpha, beta, maximizing_player=True, use_alpha_beta=False):
         """
-        Implements the minimax algorithm with stopping conditions for winning moves.
-        Ensures game state modifications are undone properly.
+        Implements Minimax with optional Alpha-Beta Pruning.
         Returns: (best_value, best_move)
         """
-
-        # Check if game is over (before evaluating moves)
+        # Check if game is over before evaluating moves
         game_result = self.check_end_conditions(game_state)
         if game_result:
             if game_result == "White Wins":
-                return 999,None  # White wins (best for White)
+                return 999, None  # Best outcome for White
             elif game_result == "Black Wins":
-                return -999, None  # Black wins (worst for White)
+                return -999, None  # Best outcome for Black
             elif game_result == "Draw":
                 return 0, None  # Draw condition
-        
+
         if depth == 0:
-            return self.evaluate_board(game_state), None  # Return board score at leaf nodes
+            return self.evaluate_board(game_state), None  # Return board evaluation
 
         # Initialize best move tracking
         best_value = -1000 if maximizing_player else 1000
@@ -196,9 +191,9 @@ class MiniChess:
             game_state["turn"] = 'black' if maximizing_player else 'white'
 
             # Recursively evaluate the new game state
-            eval_score, _ = self.minimax(game_state, depth - 1, not maximizing_player)
+            eval_score, _ = self.minimax(game_state, depth - 1, alpha, beta, not maximizing_player, use_alpha_beta)
 
-            # Undo the move (backtrack)
+            # Undo move (backtrack)
             game_state["board"][start[0]][start[1]] = moved_piece
             game_state["board"][end[0]][end[1]] = captured_piece
             game_state["turn"] = 'white' if maximizing_player else 'black'
@@ -208,14 +203,41 @@ class MiniChess:
                 if eval_score > best_value:
                     best_value = eval_score
                     best_move = move
+                if use_alpha_beta:
+                    alpha = max(alpha, best_value)
             else:  # Black is minimizing
                 if eval_score < best_value:
                     best_value = eval_score
                     best_move = move
+                if use_alpha_beta:
+                    beta = min(beta, best_value)
 
-        print(f"Best move at depth {depth}: {best_move}")  # Debugging output
+            # Alpha-Beta Pruning: Stop evaluating if we found a better move
+            if use_alpha_beta and beta <= alpha:
+                break  # Prune the rest of the tree
 
         return best_value, best_move
+
+
+    def ai_move(self, use_alpha_beta=False):
+        """
+        AI Move for Mini Chess using either Minimax or Alpha-Beta Pruning.
+        AI (Black) is the minimizing player.
+        """
+        print("AI (Black) is thinking...")
+
+        # Decide depth based on algorithm choice
+        depth = 4 if use_alpha_beta else 3
+
+        # Call Minimax or Alpha-Beta pruning
+        _, best_move = self.minimax(self.current_game_state, depth, -math.inf, math.inf, maximizing_player=False, use_alpha_beta=use_alpha_beta)
+
+        if best_move:
+            print(f"AI selects move {self.coords_to_notation(best_move[0])} -> {self.coords_to_notation(best_move[1])}")
+            self.make_move(self.current_game_state, best_move)  # Apply the best move
+        else:
+            print("AI failed to find a move.")
+
 
 
     def ai_move(self):
@@ -226,12 +248,11 @@ class MiniChess:
         print("AI (Black) is thinking...")
 
         # Call Minimax to get best move
-        _, best_move = self.minimax(self.current_game_state, depth=3, maximizing_player=False)  
+        _, best_move = self.minimax(self.current_game_state, depth=4, alpha=-math.inf, beta=math.inf, maximizing_player=False)
 
         if best_move:
             print(f"AI selects move {self.coords_to_notation(best_move[0])} -> {self.coords_to_notation(best_move[1])}")
             self.make_move(self.current_game_state, best_move)  # Apply the best move
-            self.display_board(self.current_game_state)
         else:
             print("AI failed to find a move.")
 
@@ -320,14 +341,6 @@ class MiniChess:
 
         return score
 
-    def get_game_state_copy(self, game_state):
-
-        
-        """
-        Creates a deep copy of the game state to prevent modifying the original state.
-        """
-        return copy.deepcopy(game_state)
-
     def log_move(self, player, move):
         with open(self.trace_file, "a") as file:
             file.write(f"{player} - Turn #{self.turn_count}\n")
@@ -369,7 +382,7 @@ class MiniChess:
         if not any('wK' in row for row in game_state["board"]):  # If White's king is missing
             return "Black Wins"
         
-        if self.turn_count - self.last_capture_turn >= 10:  # Draw condition
+        if self.turn_count - self.last_capture_turn >= 9:  # Draw condition
             return "Draw"
         
         return None  # Game is still ongoing
@@ -379,10 +392,24 @@ class MiniChess:
         """
         Main game loop for Mini Chess.
         - Human (White) enters moves manually.
-        - AI (Black) calculates best move using Minimax.
+        - AI (Black) calculates best move using Minimax or Alpha-Beta Pruning.
         - The game ends if checkmate or draw conditions are met.
         """
         print("Mini Chess! Moves format: 'B2 B3'. Type 'exit' to quit.")
+
+        # Ensure valid user input
+        use_alpha_beta = None
+        while use_alpha_beta is None:
+            choice = input("Select AI Algorithm:\n1 - Minimax\n2 - Alpha-Beta Pruning\nEnter choice (1/2): ")
+            
+            if choice == "1":
+                use_alpha_beta = False
+                print("\nUsing Minimax\n")
+            elif choice == "2":
+                use_alpha_beta = True
+                print("\nUsing Alpha-Beta Pruning\n")
+            else:
+                print("Invalid choice. Please enter '1' or '2'.")
 
         while True:
             self.display_board(self.current_game_state)
@@ -408,7 +435,8 @@ class MiniChess:
                 self.make_move(self.current_game_state, parsed)
 
             else:  # AI's turn
-                self.ai_move()
+                self.ai_move(use_alpha_beta=use_alpha_beta)
+
 
 if __name__ == "__main__":
     game = MiniChess()
