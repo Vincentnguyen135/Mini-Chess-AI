@@ -157,7 +157,7 @@ class MiniChess:
         return target_piece  # Return captured piece for undoing move
 
 
-    def minimax(self, game_state, depth, alpha, beta, maximizing_player=True, use_alpha_beta=False):
+    def minimax(self, game_state, depth, alpha, beta, maximizing_player, use_alpha_beta=False):
         """
         Implements Minimax with optional Alpha-Beta Pruning.
         Returns: (best_value, best_move)
@@ -219,45 +219,28 @@ class MiniChess:
         return best_value, best_move
 
 
-    def ai_move(self, use_alpha_beta=False):
+    def ai_move(self, use_alpha_beta, playing_as_white):
         """
-        AI Move for Mini Chess using either Minimax or Alpha-Beta Pruning.
-        AI (Black) is the minimizing player.
+        AI Move for Mini Chess using Minimax or Alpha-Beta Pruning.
+        - `playing_as_white=True` → AI is playing as White.
+        - `playing_as_white=False` → AI is playing as Black.
         """
-        print("AI (Black) is thinking...")
 
-        # Decide depth based on algorithm choice
+        print(f"AI ({'White' if playing_as_white else 'Black'}) is thinking...")
+
+        # Set depth based on algorithm choice
         depth = 4 if use_alpha_beta else 3
 
-        # Call Minimax or Alpha-Beta pruning
-        _, best_move = self.minimax(self.current_game_state, depth, -math.inf, math.inf, maximizing_player=False, use_alpha_beta=use_alpha_beta)
+        # Call Minimax with the correct maximizing role
+        maximizing_player = playing_as_white  # White is maximizing, Black is minimizing
+        _, best_move = self.minimax(self.current_game_state, depth, -math.inf, math.inf, maximizing_player, use_alpha_beta)
 
         if best_move:
-            print(f"AI selects move {self.coords_to_notation(best_move[0])} -> {self.coords_to_notation(best_move[1])}")
+            print(f"AI ({'White' if playing_as_white else 'Black'}) selects move {self.coords_to_notation(best_move[0])} -> {self.coords_to_notation(best_move[1])}")
             self.make_move(self.current_game_state, best_move)  # Apply the best move
         else:
             print("AI failed to find a move.")
 
-
-
-    def ai_move(self):
-        """
-        AI Move for Mini Chess using Minimax.
-        AI (Black) is the minimizing player.
-        """
-        print("AI (Black) is thinking...")
-
-        # Call Minimax to get best move
-        _, best_move = self.minimax(self.current_game_state, depth=4, alpha=-math.inf, beta=math.inf, maximizing_player=False)
-
-        if best_move:
-            print(f"AI selects move {self.coords_to_notation(best_move[0])} -> {self.coords_to_notation(best_move[1])}")
-            self.make_move(self.current_game_state, best_move)  # Apply the best move
-        else:
-            print("AI failed to find a move.")
-
-        
-    
 
    
     def evaluate_board(self, game_state):
@@ -388,28 +371,80 @@ class MiniChess:
         return None  # Game is still ongoing
 
     
+    def get_game_options(self):
+        """
+        Handles user choices for play mode and AI algorithm selection.
+        Returns:
+        - play_mode (str): 'H-H', 'H-AI', 'AI-H', or 'AI-AI'
+        - use_alpha_beta (bool): True for Alpha-Beta Pruning, False for Minimax
+        """
+        print("Select Play Mode:")
+        print("1 - Human vs Human (H-H)")
+        print("2 - Human vs AI (H-AI)")
+        print("3 - AI vs Human (AI-H)")
+        print("4 - AI vs AI (AI-AI)")
+
+        play_mode = None
+        while play_mode is None:
+            choice = input("Enter choice (1/2/3/4): ")
+            if choice == "1":
+                play_mode = "H-H"
+            elif choice == "2":
+                play_mode = "H-AI"
+            elif choice == "3":
+                play_mode = "AI-H"
+            elif choice == "4":
+                play_mode = "AI-AI"
+            else:
+                print("Invalid choice. Please enter '1', '2', '3', or '4'.")
+
+        # Only ask for AI algorithm if AI is involved
+        use_alpha_beta = None
+        if play_mode != "H-H":
+            print("\nSelect AI Algorithm:")
+            print("1 - Minimax")
+            print("2 - Alpha-Beta Pruning")
+
+            while use_alpha_beta is None:
+                ai_choice = input("Enter choice (1/2): ")
+                if ai_choice == "1":
+                    use_alpha_beta = False
+                    print("\nUsing Minimax\n")
+                elif ai_choice == "2":
+                    use_alpha_beta = True
+                    print("\nUsing Alpha-Beta Pruning\n")
+                else:
+                    print("Invalid choice. Please enter '1' or '2'.")
+
+        return play_mode, use_alpha_beta
+
+
+    def get_next_move_source(self, play_mode):
+        """
+        Determines if the next move should be played by a human or AI.
+        Returns:
+        - 'human' if a human should move
+        - 'ai' if AI should move
+        """
+        if self.current_game_state['turn'] == 'white':  # White's turn
+            return 'human' if play_mode in ["H-H", "H-AI"] else 'ai'
+        else:  # Black's turn
+            return 'human' if play_mode in ["H-H", "AI-H"] else 'ai'
+
+
     def play(self):
         """
         Main game loop for Mini Chess.
-        - Human (White) enters moves manually.
-        - AI (Black) calculates best move using Minimax or Alpha-Beta Pruning.
-        - The game ends if checkmate or draw conditions are met.
+        - Human vs Human (H-H)
+        - Human vs AI (H-AI)
+        - AI vs Human (AI-H)
+        - AI vs AI (AI-AI)
         """
+
         print("Mini Chess! Moves format: 'B2 B3'. Type 'exit' to quit.")
 
-        # Ensure valid user input
-        use_alpha_beta = None
-        while use_alpha_beta is None:
-            choice = input("Select AI Algorithm:\n1 - Minimax\n2 - Alpha-Beta Pruning\nEnter choice (1/2): ")
-            
-            if choice == "1":
-                use_alpha_beta = False
-                print("\nUsing Minimax\n")
-            elif choice == "2":
-                use_alpha_beta = True
-                print("\nUsing Alpha-Beta Pruning\n")
-            else:
-                print("Invalid choice. Please enter '1' or '2'.")
+        # Get play mode and AI algorithm choice
+        mode, use_alpha_beta = self.get_game_options()
 
         while True:
             self.display_board(self.current_game_state)
@@ -421,9 +456,21 @@ class MiniChess:
                 self.announce_winner(game_result)
                 break
 
-            if self.current_game_state['turn'] == 'white':  # Human's turn
-                move = input("White to move: ")
-                if move.lower() == 'exit':
+            turn = self.current_game_state["turn"]
+
+            # 🚀 AI vs AI Mode (Ensures AI takes turns correctly)
+            if mode == "AI-AI":
+                if turn == "white":  # AI playing as White moves first
+                    self.ai_move(use_alpha_beta, playing_as_white=True)
+                else:  # AI playing as Black moves next
+                    self.ai_move(use_alpha_beta, playing_as_white=False)
+                time.sleep(1)  # Delay for readability
+                continue  # Loop back to continue playing
+
+            # 🏁 Human vs Human Mode
+            elif mode == "H-H":
+                move = input(f"{turn.capitalize()} to move: ")
+                if move.lower() == "exit":
                     print("Game exited.")
                     break
 
@@ -434,8 +481,41 @@ class MiniChess:
 
                 self.make_move(self.current_game_state, parsed)
 
-            else:  # AI's turn
-                self.ai_move(use_alpha_beta=use_alpha_beta)
+            # 👤 Human vs AI Mode (Human White, AI Black)
+            elif mode == "H-AI":
+                if turn == "white":  # Human move
+                    move = input("White to move: ")
+                    if move.lower() == "exit":
+                        print("Game exited.")
+                        break
+
+                    parsed = self.parse_input(move)
+                    if not parsed or not self.is_valid_move(self.current_game_state, parsed):
+                        print("Invalid move. Try again.")
+                        continue
+
+                    self.make_move(self.current_game_state, parsed)
+                else:  # AI move (playing as Black)
+                    self.ai_move(use_alpha_beta, playing_as_white=False)
+
+            # 🤖 AI vs Human Mode (AI White, Human Black)
+            elif mode == "AI-H":
+                if turn == "white":  # AI moves first (playing as White)
+                    self.ai_move(use_alpha_beta, playing_as_white=True)
+                else:  # Human moves next
+                    move = input("Black to move: ")
+                    if move.lower() == "exit":
+                        print("Game exited.")
+                        break
+
+                    parsed = self.parse_input(move)
+                    if not parsed or not self.is_valid_move(self.current_game_state, parsed):
+                        print("Invalid move. Try again.")
+                        continue
+
+                    self.make_move(self.current_game_state, parsed)
+
+
 
 
 if __name__ == "__main__":
